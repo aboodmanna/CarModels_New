@@ -1,9 +1,11 @@
 ﻿
+using Azure;
 using CarModelsApi.Models;
 using CarModelsApi.Service.Models;
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
 using RestSharp;
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -24,7 +26,7 @@ namespace CarModelsApi.Controllers
 
         [HttpGet]
         [Route("GetCarModels")]
-        public async Task<ActionResult> GetCarModels(string carMake, string carYear)
+        public async Task<ActionResult> GetCarModels([Required] string carMake, [Required] string carYear)
         {
             try
             {
@@ -36,15 +38,24 @@ namespace CarModelsApi.Controllers
                     var request = new RestRequest();
 
                     var carMakeId = GetCarMakeId(carMake);
-
-                    request.AddParameter("makeId", carMakeId.ToString());
+                    if (!carMakeId.HasValue)
+                    {
+                        return StatusCode(StatusCodes.Status204NoContent,
+                       new Service.Models.Response { Status = "Error", Message = "No data found for this car" });
+                    }
+                    request.AddParameter("makeId", carMakeId.Value.ToString());
                     request.AddParameter("modelyear", carYear.ToString());
                     request.AddParameter("format", "json");
 
                     var response = await client.GetAsync(request);
                     var modelsForMakeIdYear = JsonConvert.DeserializeObject<GetModelsForMakeIdYearResponseModel>(response.Content);
 
-                    foreach(var car in modelsForMakeIdYear.Results.DistinctBy(i => i.Model_Name))
+                    if (modelsForMakeIdYear.Results.Count == 0)
+                    {
+                        return StatusCode(StatusCodes.Status204NoContent,
+                        new Service.Models.Response { Status = "Error", Message = "This role does not exist!" });
+                    }
+                    foreach (var car in modelsForMakeIdYear.Results.DistinctBy(i => i.Model_Name))
                     {
                         producedCarModels.Add(car.Model_Name);
                     }
@@ -63,7 +74,7 @@ namespace CarModelsApi.Controllers
         }
         private int? GetCarMakeId(string carMakeName)
         {
-            int? carMakeId = 0;
+            int? carMakeId;
 
             var carMakeListQuery = System.IO.File.ReadAllLines("CarMake.csv")
                 .Skip(1)
